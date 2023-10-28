@@ -32,7 +32,7 @@ defaults:
 
 jobs:
   build:
-    name: Build on ${{ matrix.os }}
+    name: Build on ${{ matrix.os }} - ${{ matrix.java }}
     strategy:
       fail-fast: false
       matrix:
