@@ -14,17 +14,17 @@ public interface SolaceConfig {
     /**
      * The Solace host (hostname:port)
      */
-    public String host();
+    String host();
 
     /**
      * The Solace VPN
      */
-    public String vpn();
+    String vpn();
 
     /**
      * Any extra parameters to pass to the Solace client
      */
     @WithParentName
-    public Map<String, String> extra();
+    Map<String, String> extra();
 
 }
