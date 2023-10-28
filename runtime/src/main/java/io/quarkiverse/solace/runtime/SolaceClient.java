@@ -4,19 +4,26 @@ import java.util.Map;
 import java.util.Properties;
 
 import jakarta.enterprise.event.Observes;
+import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.Produces;
+import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 
 import com.solace.messaging.MessagingService;
+import com.solace.messaging.MessagingServiceClientBuilder;
 import com.solace.messaging.config.SolaceProperties;
 import com.solace.messaging.config.profile.ConfigurationProfile;
 
+import io.quarkiverse.solace.MessagingServiceClientCustomizer;
 import io.quarkus.runtime.ShutdownEvent;
 
 @Singleton
 public class SolaceClient {
 
     private MessagingService service;
+
+    @Inject
+    Instance<MessagingServiceClientCustomizer> customizers;
 
     public void configure(SolaceConfig config) {
         Properties properties = new Properties();
@@ -29,9 +36,18 @@ public class SolaceClient {
             }
         }
 
-        service = MessagingService.builder(ConfigurationProfile.V1)
-                .fromProperties(properties)
-                .build();
+        MessagingServiceClientBuilder builder = MessagingService.builder(ConfigurationProfile.V1)
+                .fromProperties(properties);
+
+        if (customizers.isUnsatisfied()) {
+            service = builder.build();
+        } else {
+            if (!customizers.isResolvable()) {
+                throw new IllegalStateException("Multiple MessagingServiceClientCustomizer instances found");
+            } else {
+                service = customizers.get().customize(builder).build();
+            }
+        }
 
     }
 

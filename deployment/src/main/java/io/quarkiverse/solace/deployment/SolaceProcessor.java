@@ -2,6 +2,7 @@ package io.quarkiverse.solace.deployment;
 
 import com.solacesystems.jcsmp.JCSMPFactory;
 
+import io.quarkiverse.solace.MessagingServiceClientCustomizer;
 import io.quarkiverse.solace.runtime.SolaceClient;
 import io.quarkiverse.solace.runtime.SolaceConfig;
 import io.quarkiverse.solace.runtime.SolaceRecorder;
@@ -10,6 +11,7 @@ import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.annotations.ExecutionTime;
 import io.quarkus.deployment.annotations.Record;
+import io.quarkus.deployment.builditem.ExtensionSslNativeSupportBuildItem;
 import io.quarkus.deployment.builditem.FeatureBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.RuntimeInitializedClassBuildItem;
 
@@ -25,6 +27,12 @@ class SolaceProcessor {
     @BuildStep
     void registerBean(BuildProducer<AdditionalBeanBuildItem> producer) {
         producer.produce(AdditionalBeanBuildItem.unremovableOf(SolaceClient.class));
+        producer.produce(AdditionalBeanBuildItem.unremovableOf(MessagingServiceClientCustomizer.class));
+    }
+
+    @BuildStep
+    ExtensionSslNativeSupportBuildItem ssl() {
+        return new ExtensionSslNativeSupportBuildItem(FEATURE);
     }
 
     @BuildStep
