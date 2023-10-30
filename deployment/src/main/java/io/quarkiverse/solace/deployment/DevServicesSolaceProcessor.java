@@ -5,6 +5,7 @@ import static io.quarkus.runtime.LaunchMode.DEVELOPMENT;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -13,13 +14,15 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
-import com.github.dockerjava.api.model.Ulimit;
-
 import io.quarkus.deployment.IsNormal;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.annotations.BuildSteps;
-import io.quarkus.deployment.builditem.*;
+import io.quarkus.deployment.builditem.CuratedApplicationShutdownBuildItem;
+import io.quarkus.deployment.builditem.DevServicesResultBuildItem;
 import io.quarkus.deployment.builditem.DevServicesResultBuildItem.RunningDevService;
+import io.quarkus.deployment.builditem.DevServicesSharedNetworkBuildItem;
+import io.quarkus.deployment.builditem.DockerStatusBuildItem;
+import io.quarkus.deployment.builditem.LaunchModeBuildItem;
 import io.quarkus.deployment.console.ConsoleInstalledBuildItem;
 import io.quarkus.deployment.console.StartupLogCompressor;
 import io.quarkus.deployment.dev.devservices.GlobalDevServicesConfig;
@@ -28,6 +31,8 @@ import io.quarkus.devservices.common.ConfigureUtil;
 import io.quarkus.devservices.common.ContainerLocator;
 import io.quarkus.runtime.LaunchMode;
 import io.quarkus.runtime.configuration.ConfigUtils;
+
+import com.github.dockerjava.api.model.Ulimit;
 
 @BuildSteps(onlyIfNot = IsNormal.class, onlyIf = { GlobalDevServicesConfig.Enabled.class })
 public class DevServicesSolaceProcessor {
@@ -43,7 +48,7 @@ public class DevServicesSolaceProcessor {
 
     private static final ContainerLocator solaceContainerLocator = new ContainerLocator(DEV_SERVICE_LABEL, 55555);
     private static volatile RunningDevService running;
-    private static volatile SolaceBuildTimeConfig.DevServiceConfiguration capturedDevServicesConfiguration;
+    private static volatile SolaceDevServiceConfig cfg;
     private static volatile boolean first = true;
 
     @BuildStep
@@ -56,24 +61,28 @@ public class DevServicesSolaceProcessor {
             LoggingSetupBuildItem loggingSetupBuildItem,
             GlobalDevServicesConfig devServicesConfig) {
 
+        SolaceDevServiceConfig configuration = getConfiguration(config);
+
         if (running != null) {
+            boolean shouldShutdownTheBroker = !configuration.equals(cfg);
+            if (!shouldShutdownTheBroker) {
+                return running.toBuildItem();
+            }
             try {
                 running.close();
             } catch (Throwable e) {
                 log.error("Failed to stop solace container", e);
             }
             running = null;
-            capturedDevServicesConfiguration = null;
+            cfg = null;
         }
-
-        capturedDevServicesConfiguration = config.defaultDevService();
 
         StartupLogCompressor compressor = new StartupLogCompressor(
                 (launchMode.isTest() ? "(test) " : "") + "Solace Dev Services Starting:", consoleInstalledBuildItem,
                 loggingSetupBuildItem);
         try {
             RunningDevService devService = startContainer(dockerStatusBuildItem,
-                    capturedDevServicesConfiguration.devservices(),
+                    configuration,
                     launchMode.getLaunchMode(),
                     !devServicesSharedNetworkBuildItem.isEmpty(), devServicesConfig.timeout);
 
@@ -104,18 +113,25 @@ public class DevServicesSolaceProcessor {
                 }
                 first = true;
                 running = null;
-                capturedDevServicesConfiguration = null;
+                cfg = null;
             };
             closeBuildItem.addCloseTask(closeTask, true);
         }
+        cfg = configuration;
+
         return running.toBuildItem();
 
     }
 
+    private SolaceDevServiceConfig getConfiguration(SolaceBuildTimeConfig config) {
+        SolaceBuildTimeConfig.DevServiceConfiguration cfg = config.defaultDevService();
+        return new SolaceDevServiceConfig(cfg);
+    }
+
     private RunningDevService startContainer(DockerStatusBuildItem dockerStatusBuildItem,
-            DevServicesConfig devServicesConfig, LaunchMode launchMode,
+            SolaceDevServiceConfig devServicesConfig, LaunchMode launchMode,
             boolean useSharedNetwork, Optional<Duration> timeout) {
-        if (!devServicesConfig.enabled()) {
+        if (!devServicesConfig.enabled) {
             // explicitly disabled
             log.debug("Not starting devservices for solace as it has been disabled in the config");
             return null;
@@ -133,14 +149,14 @@ public class DevServicesSolaceProcessor {
             return null;
         }
 
-        DockerImageName dockerImageName = DockerImageName.parse(devServicesConfig.imageName().orElse(SOLACE_IMAGE))
+        DockerImageName dockerImageName = DockerImageName.parse(devServicesConfig.imageName)
                 .asCompatibleSubstituteFor(SOLACE_IMAGE);
 
         Supplier<RunningDevService> supplier = () -> {
             QuarkusSolaceContainer container = new QuarkusSolaceContainer(dockerImageName,
-                    launchMode == DEVELOPMENT ? devServicesConfig.serviceName() : null, useSharedNetwork);
+                    launchMode == DEVELOPMENT ? devServicesConfig.serviceName : null, useSharedNetwork);
             timeout.ifPresent(container::withStartupTimeout);
-            container.withEnv(devServicesConfig.containerEnv());
+            container.withEnv(devServicesConfig.containerEnv);
             container.start();
 
             String host = container.getHost() + ":" + container.getPort();
@@ -152,7 +168,7 @@ public class DevServicesSolaceProcessor {
                     container::close, config);
         };
 
-        return solaceContainerLocator.locateContainer(devServicesConfig.serviceName(), devServicesConfig.shared(), launchMode)
+        return solaceContainerLocator.locateContainer(devServicesConfig.serviceName, devServicesConfig.shared, launchMode)
                 .map(containerAddress -> {
                     String host = containerAddress.getUrl();
                     Map<String, String> config = Map.of("quarkus.solace.host", host,
@@ -240,6 +256,39 @@ public class DevServicesSolaceProcessor {
         @Override
         public String getHost() {
             return useSharedNetwork ? hostName : super.getHost();
+        }
+    }
+
+    private static class SolaceDevServiceConfig {
+
+        final boolean enabled;
+        final String serviceName;
+        final String imageName;
+        final boolean shared;
+        final Map<String, String> containerEnv;
+
+        public SolaceDevServiceConfig(SolaceBuildTimeConfig.DevServiceConfiguration cfg) {
+            enabled = cfg.devservices().enabled();
+            serviceName = cfg.devservices().serviceName();
+            imageName = cfg.devservices().imageName().orElse(SOLACE_IMAGE);
+            shared = cfg.devservices().shared();
+            containerEnv = cfg.devservices().containerEnv();
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o)
+                return true;
+            if (o == null || getClass() != o.getClass())
+                return false;
+            SolaceDevServiceConfig that = (SolaceDevServiceConfig) o;
+            return enabled == that.enabled && shared == that.shared && Objects.equals(serviceName, that.serviceName)
+                    && Objects.equals(imageName, that.imageName) && Objects.equals(containerEnv, that.containerEnv);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(enabled, serviceName, imageName, shared, containerEnv);
         }
     }
 }
