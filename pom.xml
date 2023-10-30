@@ -19,6 +19,7 @@
     <module>pubsub-plus-connector</module>
     <module>docs</module>
     <module>samples/hello-solace</module>
+    <module>samples/hello-connector-solace</module>
     <module>integration-tests</module>
   </modules>
 
