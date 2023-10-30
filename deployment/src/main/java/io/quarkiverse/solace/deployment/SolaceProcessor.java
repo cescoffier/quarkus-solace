@@ -1,7 +1,6 @@
 package io.quarkiverse.solace.deployment;
 
 import java.util.Optional;
-import java.util.function.BooleanSupplier;
 
 import com.solacesystems.jcsmp.JCSMPFactory;
 
@@ -20,6 +19,7 @@ import io.quarkus.deployment.builditem.FeatureBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.RuntimeInitializedClassBuildItem;
 import io.quarkus.deployment.metrics.MetricsCapabilityBuildItem;
 import io.quarkus.runtime.metrics.MetricsFactory;
+import io.quarkus.smallrye.health.deployment.spi.HealthBuildItem;
 
 class SolaceProcessor {
 
@@ -43,8 +43,15 @@ class SolaceProcessor {
 
     @BuildStep
     @Record(ExecutionTime.RUNTIME_INIT)
-    void init(SolaceConfig config, SolaceRecorder recorder) {
+    void init(SolaceConfig config, SolaceRecorder recorder,
+            SolaceBuildTimeConfig btConfig, Optional<MetricsCapabilityBuildItem> metrics, SolaceMetricBinder metricRecorder) {
         recorder.init(config);
+
+        if (metrics.isPresent() && btConfig.metrics().enabled()) {
+            if (metrics.get().metricsSupported(MetricsFactory.MICROMETER)) {
+                metricRecorder.initMetrics();
+            }
+        }
     }
 
     @BuildStep
@@ -52,24 +59,10 @@ class SolaceProcessor {
         producer.produce(new RuntimeInitializedClassBuildItem(JCSMPFactory.class.getName()));
     }
 
-    static class MetricsEnabled implements BooleanSupplier {
-
-        SolaceBuildTimeConfig config;
-
-        @Override
-        public boolean getAsBoolean() {
-            return config.metrics().enabled();
-        }
-    }
-
-    @BuildStep(onlyIf = MetricsEnabled.class)
-    @Record(ExecutionTime.RUNTIME_INIT)
-    void addMetrics(Optional<MetricsCapabilityBuildItem> metrics, SolaceMetricBinder recorder) {
-        if (metrics.isPresent()) {
-            if (metrics.get().metricsSupported(MetricsFactory.MICROMETER)) {
-                recorder.initMetrics();
-            }
-        }
+    @BuildStep
+    HealthBuildItem addHealthCheck(SolaceBuildTimeConfig buildTimeConfig) {
+        return new HealthBuildItem("io.quarkiverse.solace.runtime.observability.SolaceHealthCheck",
+                buildTimeConfig.health().enabled());
     }
 
 }

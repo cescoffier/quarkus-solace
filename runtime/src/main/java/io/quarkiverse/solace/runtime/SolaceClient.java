@@ -48,16 +48,20 @@ public class SolaceClient {
                 service = customizers.get().customize(builder).build();
             }
         }
-
     }
 
     @Produces
     public MessagingService connectAndGet() {
-        return service.connect();
+        if (!service.isConnected()) {
+            return service.connect();
+        }
+        return service;
     }
 
     public void shutdown(@Observes ShutdownEvent event) {
-        service.disconnect();
+        if (service != null && service.isConnected()) {
+            service.disconnect();
+        }
     }
 
 }
