@@ -27,6 +27,23 @@ endif::add-copy-button-to-env-var[]
 |`true`
 
 
+a|icon:lock[title=Fixed at build time] [[quarkus-solace_quarkus.solace.health.enabled]]`link:#quarkus-solace_quarkus.solace.health.enabled[quarkus.solace.health.enabled]`
+
+
+[.description]
+--
+Whether the liveness health check should be exposed if the smallrye-health extension is present.
+
+ifdef::add-copy-button-to-env-var[]
+Environment variable: env_var_with_copy_button:+++QUARKUS_SOLACE_HEALTH_ENABLED+++[]
+endif::add-copy-button-to-env-var[]
+ifndef::add-copy-button-to-env-var[]
+Environment variable: `+++QUARKUS_SOLACE_HEALTH_ENABLED+++`
+endif::add-copy-button-to-env-var[]
+--|boolean 
+|`true`
+
+
 a| [[quarkus-solace_quarkus.solace.host]]`link:#quarkus-solace_quarkus.solace.host[quarkus.solace.host]`
 
 
