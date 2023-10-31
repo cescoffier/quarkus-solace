@@ -13,7 +13,8 @@ public class SolaceTestResource implements QuarkusTestResourceLifecycleManager {
     public Map<String, String> start() {
         container = new SolaceContainer(SOLACE_IMAGE)
                 .withCredentials("user", "pass")
-                .withTopic("hello/foobar", SolaceContainer.Service.SMF);
+                .withTopic("hello/direct", SolaceContainer.Service.SMF)
+                .withTopic("hello/persistent", SolaceContainer.Service.SMF);
         container.start();
         return Map.of("quarkus.solace.host", container.getHost() + ":" + container.getMappedPort(55555),
                 "quarkus.solace.vpn", "default",

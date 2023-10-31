@@ -17,6 +17,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 
 import com.solace.messaging.MessagingService;
 import com.solace.messaging.config.MissingResourcesCreationConfiguration;
+import com.solace.messaging.publisher.OutboundMessage;
 import com.solace.messaging.publisher.PersistentMessagePublisher;
 import com.solace.messaging.receiver.InboundMessage;
 import com.solace.messaging.receiver.PersistentMessageReceiver;
@@ -75,7 +76,7 @@ public class SolaceHelloWorldPersistentTest {
 
         public void init(@Observes StartupEvent ev) {
             receiver = messagingService.createPersistentMessageReceiverBuilder()
-                    .withSubscriptions(TopicSubscription.of("hello/foobar"))
+                    .withSubscriptions(TopicSubscription.of("hello/persistent"))
                     .withMissingResourcesCreationStrategy(
                             MissingResourcesCreationConfiguration.MissingResourcesCreationStrategy.CREATE_ON_START)
                     .build(Queue.durableExclusiveQueue("my-queue")).start();
@@ -90,7 +91,7 @@ public class SolaceHelloWorldPersistentTest {
         }
 
         public void stop(@Observes ShutdownEvent ev) {
-            receiver.terminate(1);
+            receiver.terminate(100);
         }
     }
 
@@ -107,12 +108,17 @@ public class SolaceHelloWorldPersistentTest {
         }
 
         public void send(String message) {
-            String topicString = "hello/foobar";
-            publisher.publish(message, Topic.of(topicString));
+            String topicString = "hello/persistent";
+            OutboundMessage om = messagingService.messageBuilder().build(message);
+            try {
+                publisher.publishAwaitAcknowledgement(om, Topic.of(topicString), 10000L);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         public void stop(@Observes ShutdownEvent ev) {
-            publisher.terminate(1);
+            publisher.terminate(100);
         }
     }
 }

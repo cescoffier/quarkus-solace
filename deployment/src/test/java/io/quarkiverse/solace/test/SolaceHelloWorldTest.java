@@ -69,7 +69,7 @@ public class SolaceHelloWorldTest {
 
         public void init(@Observes StartupEvent ev) {
             receiver = messagingService.createDirectMessageReceiverBuilder()
-                    .withSubscriptions(TopicSubscription.of("hello/foobar")).build().start();
+                    .withSubscriptions(TopicSubscription.of("hello/direct")).build().start();
             receiver.receiveAsync(list::add);
         }
 
@@ -94,7 +94,7 @@ public class SolaceHelloWorldTest {
         }
 
         public void send(String message) {
-            String topicString = "hello/foobar";
+            String topicString = "hello/direct";
             publisher.publish(message, Topic.of(topicString));
         }
 

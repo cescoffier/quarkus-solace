@@ -1,21 +1,29 @@
 package io.quarkiverse.solace.deployment;
 
 import java.util.Optional;
+import java.util.function.Function;
 
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
+
+import org.jboss.jandex.*;
+
+import com.solace.messaging.MessagingService;
 import com.solacesystems.jcsmp.JCSMPFactory;
 
 import io.quarkiverse.solace.MessagingServiceClientCustomizer;
-import io.quarkiverse.solace.runtime.SolaceClient;
 import io.quarkiverse.solace.runtime.SolaceConfig;
 import io.quarkiverse.solace.runtime.SolaceRecorder;
 import io.quarkiverse.solace.runtime.observability.SolaceMetricBinder;
-import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
-import io.quarkus.deployment.annotations.BuildProducer;
-import io.quarkus.deployment.annotations.BuildStep;
-import io.quarkus.deployment.annotations.ExecutionTime;
+import io.quarkus.arc.SyntheticCreationalContext;
+import io.quarkus.arc.deployment.SyntheticBeanBuildItem;
+import io.quarkus.arc.deployment.UnremovableBeanBuildItem;
+import io.quarkus.deployment.annotations.*;
 import io.quarkus.deployment.annotations.Record;
 import io.quarkus.deployment.builditem.ExtensionSslNativeSupportBuildItem;
 import io.quarkus.deployment.builditem.FeatureBuildItem;
+import io.quarkus.deployment.builditem.ServiceStartBuildItem;
+import io.quarkus.deployment.builditem.ShutdownContextBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.RuntimeInitializedClassBuildItem;
 import io.quarkus.deployment.metrics.MetricsCapabilityBuildItem;
 import io.quarkus.runtime.metrics.MetricsFactory;
@@ -25,15 +33,20 @@ class SolaceProcessor {
 
     private static final String FEATURE = "solace";
 
+    private static final ParameterizedType SOLACE_CUSTOMIZER_INJECTION_TYPE = ParameterizedType.create(
+            DotName.createSimple(Instance.class),
+            new Type[] { ClassType.create(DotName.createSimple(MessagingServiceClientCustomizer.class.getName())) }, null);
+
+    private static final AnnotationInstance[] EMPTY_ANNOTATIONS = new AnnotationInstance[0];
+
     @BuildStep
     FeatureBuildItem feature() {
         return new FeatureBuildItem(FEATURE);
     }
 
     @BuildStep
-    void registerBean(BuildProducer<AdditionalBeanBuildItem> producer) {
-        producer.produce(AdditionalBeanBuildItem.unremovableOf(SolaceClient.class));
-        producer.produce(AdditionalBeanBuildItem.unremovableOf(MessagingServiceClientCustomizer.class));
+    void registerBean(BuildProducer<UnremovableBeanBuildItem> producer) {
+        producer.produce(UnremovableBeanBuildItem.beanTypes(MessagingServiceClientCustomizer.class));
     }
 
     @BuildStep
@@ -43,10 +56,31 @@ class SolaceProcessor {
 
     @BuildStep
     @Record(ExecutionTime.RUNTIME_INIT)
-    void init(SolaceConfig config, SolaceRecorder recorder,
-            SolaceBuildTimeConfig btConfig, Optional<MetricsCapabilityBuildItem> metrics, SolaceMetricBinder metricRecorder) {
-        recorder.init(config);
+    ServiceStartBuildItem init(
+            SolaceConfig config, SolaceRecorder recorder,
+            ShutdownContextBuildItem shutdown, BuildProducer<SyntheticBeanBuildItem> syntheticBeans) {
 
+        Function<SyntheticCreationalContext<MessagingService>, MessagingService> function = recorder.init(config, shutdown);
+
+        SyntheticBeanBuildItem.ExtendedBeanConfigurator solaceConfigurator = SyntheticBeanBuildItem
+                .configure(MessagingService.class)
+                .defaultBean()
+                .scope(ApplicationScoped.class)
+                .addInjectionPoint(SOLACE_CUSTOMIZER_INJECTION_TYPE, EMPTY_ANNOTATIONS)
+                .createWith(function)
+                .unremovable()
+                .setRuntimeInit();
+
+        syntheticBeans.produce(solaceConfigurator.done());
+
+        return new ServiceStartBuildItem(FEATURE);
+    }
+
+    @BuildStep
+    @Record(ExecutionTime.RUNTIME_INIT)
+    @Consume(SolaceBuildItem.class)
+    void initMetrics(SolaceBuildTimeConfig btConfig, Optional<MetricsCapabilityBuildItem> metrics,
+            SolaceMetricBinder metricRecorder) {
         if (metrics.isPresent() && btConfig.metrics().enabled()) {
             if (metrics.get().metricsSupported(MetricsFactory.MICROMETER)) {
                 metricRecorder.initMetrics();
