@@ -17,6 +17,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 
 import com.solace.messaging.MessagingService;
 import com.solace.messaging.config.MissingResourcesCreationConfiguration;
+import com.solace.messaging.publisher.OutboundMessage;
 import com.solace.messaging.publisher.PersistentMessagePublisher;
 import com.solace.messaging.receiver.InboundMessage;
 import com.solace.messaging.receiver.PersistentMessageReceiver;
@@ -90,7 +91,7 @@ public class SolaceHelloWorldPersistentTest {
         }
 
         public void stop(@Observes ShutdownEvent ev) {
-            receiver.terminate(1);
+            receiver.terminate(100);
         }
     }
 
@@ -108,11 +109,16 @@ public class SolaceHelloWorldPersistentTest {
 
         public void send(String message) {
             String topicString = "hello/foobar";
-            publisher.publish(message, Topic.of(topicString));
+            OutboundMessage om = messagingService.messageBuilder().build(message);
+            try {
+                publisher.publishAwaitAcknowledgement(om, Topic.of(topicString), 10000L);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         public void stop(@Observes ShutdownEvent ev) {
-            publisher.terminate(1);
+            publisher.terminate(100);
         }
     }
 }
