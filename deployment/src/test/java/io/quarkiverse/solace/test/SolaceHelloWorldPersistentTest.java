@@ -76,7 +76,7 @@ public class SolaceHelloWorldPersistentTest {
 
         public void init(@Observes StartupEvent ev) {
             receiver = messagingService.createPersistentMessageReceiverBuilder()
-                    .withSubscriptions(TopicSubscription.of("hello/foobar"))
+                    .withSubscriptions(TopicSubscription.of("hello/persistent"))
                     .withMissingResourcesCreationStrategy(
                             MissingResourcesCreationConfiguration.MissingResourcesCreationStrategy.CREATE_ON_START)
                     .build(Queue.durableExclusiveQueue("my-queue")).start();
@@ -108,7 +108,7 @@ public class SolaceHelloWorldPersistentTest {
         }
 
         public void send(String message) {
-            String topicString = "hello/foobar";
+            String topicString = "hello/persistent";
             OutboundMessage om = messagingService.messageBuilder().build(message);
             try {
                 publisher.publishAwaitAcknowledgement(om, Topic.of(topicString), 10000L);
