@@ -38,6 +38,9 @@
 
     <solace.version>1.4.0</solace.version>
 
+    <assertj-core.version>3.24.2</assertj-core.version>
+    <weld.version>5.1.2.Final</weld.version>
+    <testcontainers-solace.version>1.18.3</testcontainers-solace.version>
   </properties>
 
   <dependencyManagement>
@@ -54,6 +57,25 @@
         <groupId>com.solace</groupId>
         <artifactId>solace-messaging-client</artifactId>
         <version>${solace.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.jboss.weld.se</groupId>
+        <artifactId>weld-se-shaded</artifactId>
+        <version>${weld.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.jboss.weld</groupId>
+        <artifactId>weld-core-impl</artifactId>
+        <version>${weld.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.assertj</groupId>
+        <artifactId>assertj-core</artifactId>
+        <version>${assertj-core.version}</version>
+        <scope>test</scope>
       </dependency>
 
     </dependencies>
