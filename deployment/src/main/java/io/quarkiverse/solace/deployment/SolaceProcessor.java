@@ -17,6 +17,7 @@ import io.quarkiverse.solace.runtime.SolaceRecorder;
 import io.quarkiverse.solace.runtime.observability.SolaceMetricBinder;
 import io.quarkus.arc.SyntheticCreationalContext;
 import io.quarkus.arc.deployment.SyntheticBeanBuildItem;
+import io.quarkus.arc.deployment.SyntheticBeansRuntimeInitBuildItem;
 import io.quarkus.arc.deployment.UnremovableBeanBuildItem;
 import io.quarkus.deployment.annotations.*;
 import io.quarkus.deployment.annotations.Record;
@@ -78,6 +79,7 @@ class SolaceProcessor {
 
     @BuildStep
     @Record(ExecutionTime.RUNTIME_INIT)
+    @Consume(SyntheticBeansRuntimeInitBuildItem.class)
     @Consume(SolaceBuildItem.class)
     void initMetrics(SolaceBuildTimeConfig btConfig, Optional<MetricsCapabilityBuildItem> metrics,
             SolaceMetricBinder metricRecorder) {
