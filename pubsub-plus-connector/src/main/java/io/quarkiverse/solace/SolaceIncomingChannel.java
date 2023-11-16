@@ -74,17 +74,22 @@ public class SolaceIncomingChannel implements ReceiverActivationPassivationConfi
         }
 
         this.receiver = builder.build(getQueue(ic));
+        boolean lazyStart = ic.getClientLazyStart();
         this.ackHandler = new SolaceAckHandler(receiver);
         this.failureHandler = new SolaceFailureHandler(channel, receiver);
         // TODO Here use a subscription receiver.receiveAsync with an internal queue
         this.pollerThread = Executors.newSingleThreadExecutor();
         this.stream = Multi.createBy().repeating()
-                .supplier(receiver::receiveMessage)
+                .uni(() -> Uni.createFrom().item(receiver::receiveMessage)
+                        .runSubscriptionOn(pollerThread))
                 .until(__ -> closed.get())
-                .runSubscriptionOn(pollerThread)
                 .emitOn(context::runOnContext)
                 .map(consumed -> new SolaceInboundMessage<>(consumed, ackHandler, failureHandler))
-                .onSubscription().call(() -> Uni.createFrom().completionStage(receiver.startAsync()));
+                .plug(m -> lazyStart ? m.onSubscription().call(() -> Uni.createFrom().completionStage(receiver.startAsync()))
+                        : m);
+        if (!lazyStart) {
+            receiver.start();
+        }
     }
 
     private static Queue getQueue(SolaceConnectorIncomingConfiguration ic) {
