@@ -34,6 +34,7 @@ import io.vertx.mutiny.core.Vertx;
 @Connector(SolaceConnector.CONNECTOR_NAME)
 // TODO only persisted is implemented
 @ConnectorAttribute(name = "client.type", type = "string", direction = INCOMING_AND_OUTGOING, description = "Direct or persisted", defaultValue = "persisted")
+@ConnectorAttribute(name = "client.lazy.start", type = "boolean", direction = INCOMING_AND_OUTGOING, description = "Whether the receiver or publisher is started at initialization or lazily at subscription time", defaultValue = "false")
 @ConnectorAttribute(name = "subscriptions", type = "string", direction = INCOMING, description = "The comma separated list of subscriptions, the channel name if empty")
 @ConnectorAttribute(name = "persistent.queue.type", type = "string", direction = INCOMING, description = "The queue type of receiver", defaultValue = "durable-non-exclusive")
 @ConnectorAttribute(name = "persistent.queue.name", type = "string", direction = INCOMING, description = "The queue name of receiver")

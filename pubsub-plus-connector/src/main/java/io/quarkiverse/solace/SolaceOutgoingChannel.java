@@ -52,11 +52,15 @@ public class SolaceOutgoingChannel implements PersistentMessagePublisher.Message
         if (oc.getWaitForPublishReceipt()) {
             publisher.setMessagePublishReceiptListener(this);
         }
+        boolean lazyStart = oc.getClientLazyStart();
         this.topic = Topic.of(oc.getTopic().orElse(this.channel));
         this.processor = new SenderProcessor(oc.getMaxInflightMessages(), oc.getWaitForPublishReceipt(),
                 m -> sendMessage(solace, m, oc.getWaitForPublishReceipt()));
-        this.subscriber = MultiUtils.via(processor, multi -> multi
-                .onSubscription().call(() -> Uni.createFrom().completionStage(publisher.startAsync())));
+        this.subscriber = MultiUtils.via(processor, multi -> multi.plug(
+                m -> lazyStart ? m.onSubscription().call(() -> Uni.createFrom().completionStage(publisher.startAsync())) : m));
+        if (!lazyStart) {
+            this.publisher.start();
+        }
     }
 
     private Uni<Void> sendMessage(MessagingService solace, Message<?> m, boolean waitForPublishReceipt) {
@@ -103,7 +107,9 @@ public class SolaceOutgoingChannel implements PersistentMessagePublisher.Message
         if (payload instanceof OutboundMessage) {
             outboundMessage = (OutboundMessage) payload;
         } else if (payload instanceof String) {
-            outboundMessage = msgBuilder.build((String) payload);
+            outboundMessage = msgBuilder
+                    .withHTTPContentHeader(HttpHeaderValues.TEXT_PLAIN.toString(), "")
+                    .build((String) payload);
         } else if (payload instanceof byte[]) {
             outboundMessage = msgBuilder.build((byte[]) payload);
         } else {
