@@ -29,10 +29,12 @@ public class SolaceOutgoingChannel implements PersistentMessagePublisher.Message
     private final String channel;
     private final Flow.Subscriber<? extends Message<?>> subscriber;
     private final Topic topic;
+    private final SenderProcessor processor;
 
     public SolaceOutgoingChannel(Vertx vertx, SolaceConnectorOutgoingConfiguration oc, MessagingService solace) {
         this.channel = oc.getChannel();
         PersistentMessagePublisherBuilder builder = solace.createPersistentMessagePublisherBuilder();
+        // TODO which default backpressure strategy : wait or elastic?
         switch (oc.getBackPressureStrategy()) {
             case "reject":
                 builder.onBackPressureReject(oc.getBackPressureBufferCapacity());
@@ -47,20 +49,29 @@ public class SolaceOutgoingChannel implements PersistentMessagePublisher.Message
         oc.getDeliveryAckTimeout().ifPresent(builder::withDeliveryAckTimeout);
         oc.getDeliveryAckWindowSize().ifPresent(builder::withDeliveryAckWindowSize);
         this.publisher = builder.build();
-        publisher.setMessagePublishReceiptListener(this);
+        if (oc.getWaitForPublishReceipt()) {
+            publisher.setMessagePublishReceiptListener(this);
+        }
         this.topic = Topic.of(oc.getTopic().orElse(this.channel));
-        // TODO send with in flight messages
-        this.subscriber = MultiUtils.via(multi -> multi.call(m -> publishMessage(publisher, m, solace.messageBuilder())
-                .onItem().transformToUni(receipt -> {
-                    OutgoingMessageMetadata.setResultOnMessage(m, receipt);
-                    return Uni.createFrom().completionStage(m.ack());
-                })
-                .onFailure().recoverWithUni(t -> Uni.createFrom().completionStage(m.nack(t))))
+        this.processor = new SenderProcessor(oc.getMaxInflightMessages(), oc.getWaitForPublishReceipt(),
+                m -> sendMessage(solace, m, oc.getWaitForPublishReceipt()));
+        this.subscriber = MultiUtils.via(processor, multi -> multi
                 .onSubscription().call(() -> Uni.createFrom().completionStage(publisher.startAsync())));
     }
 
+    private Uni<Void> sendMessage(MessagingService solace, Message<?> m, boolean waitForPublishReceipt) {
+        return publishMessage(publisher, m, solace.messageBuilder(), waitForPublishReceipt)
+                .onItem().transformToUni(receipt -> {
+                    if (receipt != null) {
+                        OutgoingMessageMetadata.setResultOnMessage(m, receipt);
+                    }
+                    return Uni.createFrom().completionStage(m.ack());
+                })
+                .onFailure().recoverWithUni(t -> Uni.createFrom().completionStage(m.nack(t)));
+    }
+
     private Uni<PublishReceipt> publishMessage(PersistentMessagePublisher publisher, Message<?> m,
-            OutboundMessageBuilder msgBuilder) {
+            OutboundMessageBuilder msgBuilder, boolean waitForPublishReceipt) {
         Topic topic = this.topic;
         OutboundMessage outboundMessage;
         m.getMetadata(SolaceOutboundMetadata.class).ifPresent(metadata -> {
@@ -102,7 +113,12 @@ public class SolaceOutgoingChannel implements PersistentMessagePublisher.Message
         }
         return Uni.createFrom().<PublishReceipt> emitter(e -> {
             try {
-                publisher.publish(outboundMessage, topic, e);
+                if (waitForPublishReceipt) {
+                    publisher.publish(outboundMessage, topic, e);
+                } else {
+                    publisher.publish(outboundMessage, topic);
+                    e.complete(null);
+                }
             } catch (Throwable t) {
                 e.fail(t);
             }
@@ -114,6 +130,9 @@ public class SolaceOutgoingChannel implements PersistentMessagePublisher.Message
     }
 
     void close() {
+        if (processor != null) {
+            processor.cancel();
+        }
         publisher.terminate(5000);
     }
 

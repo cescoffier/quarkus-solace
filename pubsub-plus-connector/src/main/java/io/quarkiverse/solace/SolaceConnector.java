@@ -43,6 +43,8 @@ import io.vertx.mutiny.core.Vertx;
 @ConnectorAttribute(name = "persistent.replay.timebased-start-time", type = "string", direction = INCOMING, description = "The receiver replay timebased start time")
 @ConnectorAttribute(name = "persistent.replay.replication-group-message-id", type = "string", direction = INCOMING, description = "The receiver replay replication group message id")
 @ConnectorAttribute(name = "topic", type = "string", direction = OUTGOING, description = "The topic to publish messages, by default the channel name")
+@ConnectorAttribute(name = "max-inflight-messages", type = "long", direction = OUTGOING, description = "The maximum number of messages to be written to Solace broker. It limits the number of messages waiting to be written and acknowledged by the broker. You can set this attribute to `0` remove the limit", defaultValue = "1024")
+@ConnectorAttribute(name = "waitForPublishReceipt", type = "boolean", direction = OUTGOING, description = "Whether the client waits to receive the publish receipt from Solace broker before acknowledging the message", defaultValue = "true")
 @ConnectorAttribute(name = "delivery.ack.timeout", type = "int", direction = OUTGOING, description = "Delivery ack timeout")
 @ConnectorAttribute(name = "delivery.ack.window.size", type = "int", direction = OUTGOING, description = "Delivery ack window size")
 @ConnectorAttribute(name = "back-pressure.strategy", type = "string", direction = OUTGOING, description = "Outgoing messages backpressure strategy", defaultValue = "elastic")

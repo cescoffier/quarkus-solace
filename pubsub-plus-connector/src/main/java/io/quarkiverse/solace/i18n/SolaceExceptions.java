@@ -15,4 +15,10 @@ public interface SolaceExceptions {
     @Message(id = 18000, value = "`message` does not contain metadata of class %s")
     IllegalArgumentException illegalArgument(Class c);
 
+    @Message(id = 18001, value = "Only one subscriber allowed")
+    IllegalStateException illegalStateOnlyOneSubscriber();
+
+    @Message(id = 18002, value = "Expecting downstream to consume without back-pressure")
+    IllegalStateException illegalStateConsumeWithoutBackPressure();
+
 }
